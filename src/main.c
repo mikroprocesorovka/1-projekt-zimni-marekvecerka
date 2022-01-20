@@ -11,16 +11,6 @@
 #define _ISOC99_SOURCE
 #define _GNU_SOURCE
 
-#define LED_PORT GPIOC
-#define LED_PIN  GPIO_PIN_5
-#define LED_HIGH   GPIO_WriteHigh(LED_PORT, LED_PIN)
-#define LED_LOW  GPIO_WriteLow(LED_PORT, LED_PIN)
-#define LED_REVERSE GPIO_WriteReverse(LED_PORT, LED_PIN)
-
-#define BTN_PORT GPIOE
-#define BTN_PIN  GPIO_PIN_4
-#define BTN_PUSH (GPIO_ReadInputPin(BTN_PORT, BTN_PIN)==RESET) 
-
 
 void init_enc(void);
 void process_enc(void);
