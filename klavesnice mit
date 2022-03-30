@@ -1,0 +1,197 @@
+#include "stm8s.h"
+#include "milis.h"
+#include "stm8_hd44780.h"
+#include "stdio.h"
+
+
+void init_timer(void);
+void display(void);
+void minutky(void);
+void pocitani(void);
+
+
+uint8_t y=0;
+uint16_t time, cas, doba, trvani, odpocet, led=0;
+int16_t sekundy=59;
+int16_t minuty=0; // prominná jejíž hodnotu miníme enkodérem
+uint16_t lasttime=0;
+uint8_t textove_pole[32];
+
+void main(void){
+CLK_HSIPrescalerConfig(CLK_PRESCALER_HSIDIV1); // 16MHz
+GPIO_Init(GPIOD,GPIO_PIN_6,GPIO_MODE_OUT_PP_LOW_SLOW);
+init_milis(); 
+lcd_init();		// inicializace displeje
+init_timer();	
+enableInterrupts(); 
+
+  while (1){
+	doba=milis();
+	process_keypad;
+	minutky();
+	display();
+	
+	}
+}
+
+void display(void){ //zobrazování eísel na displeji 
+	lcd_gotoxy(10,0);//stará se zobrazení textu a symbolu na displej.
+	lcd_puts(":");
+	sprintf(textove_pole,"%02u",sekundy);
+	lcd_gotoxy(11,0);
+	lcd_puts(textove_pole);
+	sprintf(textove_pole,"%02u",minuty);
+	lcd_gotoxy(8,0);
+	lcd_puts(textove_pole);
+	lcd_gotoxy(4,0);
+	lcd_puts("cas ");
+}
+
+void process_keypad(void){
+static uint8_t minule_stisknuto=0;	// ukládáme poslední stav klávesnice
+static uint16_t last_time=0; 
+uint16_t stisknuto;
+
+	if(milis()-last_time > 20){ // každých 20ms ...
+		last_time = milis();
+		stisknuto=keypad_scan(); // ... skenujeme klávesnici
+		if(minule_stisknuto == 0 && stisknuto != 0){ // pokud byla minule uvolněná a teď je něco stisknuto
+			minule_stisknuto = stisknuto;
+			// zachytili jsme stisk klávesy - můžeme na to zareagovat
+			
+			if(stisknuto < 13){     //pro přidávání hodnot slouží jen hodnoty od 1 do 12, spodní 4 klávesy jsou volné pro ovládání minutek
+				minuty=minuty+stisknuto;
+				if(odpocet == 0){
+					sekundy=60;
+				}
+				
+				display();
+				minutky();
+				}
+			}
+			else if(stisknuto == 15){ //nulování počítadla
+				minuty=0;
+				sekundy=0;
+				odpocet=0;
+				
+				minutky();
+				display();
+			}
+			else if(stisknuto == 16){ //vymaže celý displej, simulace vypnutí
+				minuty=0;
+				sekundy=0;
+				odpocet=0;
+				
+				display();
+				minuty();
+				lcd_clear();  
+			}
+			else if(stisknuto == 13 && sekundy > 0){ //START tlačítko, spuštění minutek
+				odpocet=1;
+				
+				minutky();
+				//tímto tlačítkem se bude odpočítávání spouštět
+			}
+			else if(stisknuto == 14 && odpocet == 1){ //STOP tlačítko, zastavení minutek
+				lcd_clear();
+				zobraz_pocitadlo();
+				lcd_gotoxy(4,0);
+				sprintf(text,"%2u",sekundy);
+				lcd_puts(text);
+				if(sekundy < 10){
+					lcd_gotoxy(4,0);
+					sprintf(text,"0");
+					lcd_puts(text);
+				}
+				lcd_gotoxy(0,1);
+				sprintf(text,">POZASTAVENO<");
+				lcd_puts(text);
+				x=0;
+				//tímto tlačítkem se bude odpočítávání pozastavovat
+			}
+			else if(stisknuto == 14 && x == 0){			//STOP tlačítko, vypnutí výstražného signálu pro ukončení odpočtu
+				GPIO_WriteLow(GPIOB,GPIO_PIN_7);
+			}
+			
+		}			
+		if(stisknuto == 0){minule_stisknuto=0;}
+	}
+}
+
+
+/*void rezim(void){ //startuje odpoeet minutek, po stisknutí tlaeítka enkodéru
+
+		if(GPIO_ReadInputPin(GPIOF, GPIO_PIN_5) == RESET && y==0) {
+			y=1;
+			odpocet=0;
+			led=0;
+	} if(GPIO_ReadInputPin(GPIOF, GPIO_PIN_5) == RESET && y==1){
+			y=0;
+			odpocet=1;
+	}
+}*/
+
+void minutky(void){ //funkce odpoeítávání
+	if(led==1){ 			//blikání LED diody po skoneení odpoetu
+			if(milis() - trvani >= 200){
+				trvani = milis(); 
+				GPIO_WriteReverse(GPIOD,GPIO_PIN_6); 
+			}
+			}else{
+				GPIO_WriteLow(GPIOD,GPIO_PIN_6);
+			}
+
+	if (odpocet==1){
+			if(doba - cas >= 1000){
+						cas = milis();
+						sekundy--;
+				if(sekundy<0){
+					sekundy=59;
+					minuty--;
+				}
+				if(minuty<0){
+					odpocet=0;
+					minuty=0;
+					sekundy=0;
+					led=1;
+				}
+				
+					display();
+			}
+	}
+}
+
+
+
+
+
+
+void init_timer(void){
+TIM3_TimeBaseInit(TIM3_PRESCALER_16,1999); 
+TIM3_ITConfig(TIM3_IT_UPDATE, ENABLE); 
+TIM3_Cmd(ENABLE); // spustit timer
+}
+
+#ifdef USE_FULL_ASSERT
+
+/**
+  * @brief  Reports the name of the source file and the source line number
+  *   where the assert_param error has occurred.
+  * @param file: pointer to the source file name
+  * @param line: assert_param error line source number
+  * @retval : None
+  */
+void assert_failed(u8* file, u32 line)
+{ 
+  /* User can add his own implementation to report the file name and line number,
+     ex: printf("Wrong parameters value: file %s on line %d\r\n", file, line) */
+
+  /* Infinite loop */
+  while (1)
+  {
+  }
+}
+#endif
+
+
+/************************ (C) COPYRIGHT STMicroelectronics *****END OF FILE****/
